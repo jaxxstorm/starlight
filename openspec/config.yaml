@@ -1,0 +1,37 @@
+schema: spec-driven
+
+context: |
+  Starlight is a Go rewrite of https://github.com/Th0rgal/satmux.
+  Its goal is to match satmux's behavior and capabilities while making it
+  practical to run permanently on a GL.iNet travel router.
+
+  satmux improves the experience of high-latency satellite and inflight Wi-Fi
+  by multiplexing traffic over persistent connections to a ground server,
+  reducing round trips and using compression where appropriate. Starlight
+  should preserve the upstream client and ground-server functionality and
+  protocols, including its security properties, rather than silently changing
+  their behavior.
+
+  The router deployment should let all connected clients benefit, rather than
+  requiring each client to run the application. It should be installable as a
+  persistent application that can start automatically and continue running
+  across router reboots. Account for the resource and platform constraints of
+  GL.iNet travel routers when designing deployment and operation.
+  The initial target is the GL.iNet GL-E5800 NA Mudi 7 5G; its firmware
+  version and platform details must be verified before claiming support.
+  If Starlight or its ground server becomes unavailable, new client traffic
+  should fall back to normal routing. This fail-open behavior means traffic
+  can bypass Starlight and must not be presented as a privacy guarantee.
+
+  Implement the application in Go and aim for a single binary that is easy to
+  build, distribute, and release for the relevant router and server platforms.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours

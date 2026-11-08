@@ -1,0 +1,24 @@
+#!/bin/sh
+# Let the previous client release its table before starting its replacement.
+set -e
+/etc/init.d/starlight stop
+count=0
+while /etc/init.d/starlight running >/dev/null 2>&1; do
+	[ "$count" -lt 20 ] || exit 1
+	count=$((count + 1))
+	sleep 1
+done
+count=0
+while nft list table inet starlight_router >/dev/null 2>&1; do
+	# Give the old process time to remove even an already empty table. After
+	# the full lease window, init can recover a recognizable stale table.
+	if [ "$count" -ge 20 ]; then
+		nft list set inet starlight_router capture_lease 2>/dev/null | grep -q 'elements =' && exit 1
+		break
+	fi
+	count=$((count + 1))
+	sleep 1
+done
+/etc/init.d/starlight start
+sleep 1
+/etc/init.d/starlight running >/dev/null 2>&1

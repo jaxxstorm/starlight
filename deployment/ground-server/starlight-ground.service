@@ -1,0 +1,25 @@
+[Unit]
+Description=Starlight Go ground server (independent instance)
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+EnvironmentFile=/etc/starlight-ground/secret.env
+ExecStart=/usr/local/libexec/starlight-ground server --host 127.0.0.1 --port 18444
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

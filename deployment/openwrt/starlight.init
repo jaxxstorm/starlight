@@ -1,0 +1,91 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=10
+USE_PROCD=1
+
+valid_number() {
+	case "$1" in ''|0*|*[!0-9]*|??????*) return 1 ;; esac
+	[ "$1" -ge 1 ] && [ "$1" -le "$2" ]
+}
+
+start_service() {
+	local config=/etc/starlight/client.conf
+	local owner mode key value host='' port='' psk='' seen_host='' seen_port='' seen_psk=''
+	local carriers=12 socks_port=1080 http_port=8080 fast_port=8081
+	local transparent_port=0
+	local router_wide=0 lan_prefix=''
+	local seen_carriers='' seen_socks='' seen_http='' seen_fast='' seen_transparent='' seen_router_wide=''
+	[ -f "$config" ] && [ ! -L "$config" ] || {
+		logger -t starlight 'client configuration missing or invalid'
+		return 1
+	}
+	owner=$(stat -c '%u' "$config") || return 1
+	mode=$(stat -c '%a' "$config") || return 1
+	[ "$owner" = 0 ] && { [ "$mode" = 600 ] || [ "$mode" = 400 ]; } || {
+		logger -t starlight 'client configuration must be root-owned and mode 0600 or 0400'
+		return 1
+	}
+	while IFS='=' read -r key value || [ -n "$key$value" ]; do
+		case "$key" in
+			''|\#*) continue ;;
+			host) [ -z "$seen_host" ] || return 1; seen_host=1; host=$value ;;
+			port) [ -z "$seen_port" ] || return 1; seen_port=1; port=$value ;;
+			psk) [ -z "$seen_psk" ] || return 1; seen_psk=1; psk=$value ;;
+			carriers) [ -z "$seen_carriers" ] || return 1; seen_carriers=1; carriers=$value ;;
+			socks_port) [ -z "$seen_socks" ] || return 1; seen_socks=1; socks_port=$value ;;
+			http_port) [ -z "$seen_http" ] || return 1; seen_http=1; http_port=$value ;;
+			fast_port) [ -z "$seen_fast" ] || return 1; seen_fast=1; fast_port=$value ;;
+			transparent_port) [ -z "$seen_transparent" ] || return 1; seen_transparent=1; transparent_port=$value ;;
+			router_wide) [ -z "$seen_router_wide" ] || return 1; seen_router_wide=1; router_wide=$value ;;
+			*) logger -t starlight 'unknown client configuration option'; return 1 ;;
+		esac
+	done < "$config"
+	case "$host" in ''|*[!a-zA-Z0-9.:-]*) logger -t starlight 'invalid ground server host'; return 1 ;; esac
+	case "$router_wide" in 0|1) ;; *) logger -t starlight 'invalid router-wide setting'; return 1 ;; esac
+	if [ "$router_wide" = 1 ]; then
+		[ "$transparent_port" != 0 ] || { logger -t starlight 'router-wide mode requires a transparent port'; return 1; }
+		case "$host" in *[!0-9.]*|'') logger -t starlight 'router-wide mode requires an IPv4 ground address'; return 1 ;; esac
+		lan_prefix=$(ip -o -4 addr show dev br-lan | awk 'NR==1 {print $4}')
+		[ -n "$lan_prefix" ] || { logger -t starlight 'cannot discover LAN prefix'; return 1; }
+		# Recover only our recognizable, independently expired capture table.
+		if nft list table inet starlight_router >/dev/null 2>&1; then
+			nft list set inet starlight_router capture_lease 2>/dev/null | grep -q 'elements =' && {
+				logger -t starlight 'capture lease still active; refusing stale-table cleanup'; return 1
+			}
+			nft list chain inet starlight_router prerouting 2>/dev/null | grep -q 'iifname @capture_lease' || {
+				logger -t starlight 'unrecognized capture table; refusing cleanup'; return 1
+			}
+			nft delete table inet starlight_router || return 1
+		fi
+	fi
+	valid_number "$port" 65535 || { logger -t starlight 'invalid ground server port'; return 1; }
+	valid_number "$carriers" 64 || { logger -t starlight 'invalid carrier count'; return 1; }
+	valid_number "$socks_port" 65535 && valid_number "$http_port" 65535 && valid_number "$fast_port" 65535 || {
+		logger -t starlight 'invalid local listener port'; return 1
+	}
+	[ "$socks_port" != "$http_port" ] && [ "$socks_port" != "$fast_port" ] && [ "$http_port" != "$fast_port" ] || {
+		logger -t starlight 'local listener ports must be distinct'; return 1
+	}
+	if [ "$transparent_port" != 0 ]; then
+		valid_number "$transparent_port" 65535 || { logger -t starlight 'invalid transparent listener port'; return 1; }
+		[ "$transparent_port" != "$socks_port" ] && [ "$transparent_port" != "$http_port" ] && [ "$transparent_port" != "$fast_port" ] || {
+			logger -t starlight 'local listener ports must be distinct'; return 1
+		}
+		[ "$router_wide" = 1 ] || logger -t starlight 'experimental transparent listener enabled without firewall capture'
+	fi
+	case "$psk" in ''|*[!0-9a-fA-F]*) logger -t starlight 'invalid PSK'; return 1 ;; esac
+	[ $((${#psk} % 2)) -eq 0 ] || { logger -t starlight 'invalid PSK'; return 1; }
+	procd_open_instance
+	procd_set_param command /usr/sbin/starlight client --host "$host" --port "$port" \
+		--carriers "$carriers" --socks-port "$socks_port" --http-port "$http_port" --fast-port "$fast_port" \
+		--transparent-port "$transparent_port"
+	if [ "$router_wide" = 1 ]; then
+		procd_append_param command --capture-interface br-lan --capture-bypass "$lan_prefix,$host/32"
+	fi
+	procd_set_param env "SATMUX_PSK=$psk"
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}

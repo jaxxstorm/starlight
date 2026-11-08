@@ -1,0 +1,16 @@
+#!/bin/sh
+# Read data, never source the configuration or put the key in command arguments.
+host= port= psk=
+while IFS='=' read -r key value || [ -n "$key$value" ]; do
+	case "$key" in
+		host) host=$value ;;
+		port) port=$value ;;
+		psk) psk=$value ;;
+	esac
+done < /etc/starlight/client.conf
+case "$host" in ''|*[!a-zA-Z0-9.:-]*) exit 1 ;; esac
+case "$port" in ''|*[!0-9]*) exit 1 ;; esac
+case "$psk" in ''|*[!0-9a-fA-F]*) exit 1 ;; esac
+SATMUX_PSK=$psk
+export SATMUX_PSK
+exec /usr/sbin/starlight probe --host "$host" --port "$port"

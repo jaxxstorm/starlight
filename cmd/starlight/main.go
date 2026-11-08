@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jaxxstorm/starlight/internal/bench"
 	"github.com/jaxxstorm/starlight/routertraffic"
 	"github.com/jaxxstorm/starlight/satmux"
 )
@@ -28,8 +30,8 @@ func main() {
 }
 
 func run() error {
-	if len(os.Args) < 2 || (os.Args[1] != "client" && os.Args[1] != "server" && os.Args[1] != "probe") {
-		return errors.New("usage: starlight {client|server|probe} [options]")
+	if len(os.Args) < 2 || (os.Args[1] != "client" && os.Args[1] != "server" && os.Args[1] != "probe" && os.Args[1] != "bench") {
+		return errors.New("usage: starlight {client|server|probe|bench} [options]")
 	}
 	mode := os.Args[1]
 	fs := flag.NewFlagSet(mode, flag.ContinueOnError)
@@ -53,6 +55,15 @@ func run() error {
 	}
 	if fs.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
+	}
+	if mode == "bench" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		result, err := bench.Run(ctx, bench.DefaultTargets, *fastPort)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(result)
 	}
 	psk, err := hex.DecodeString(*pskHex)
 	if err != nil || len(psk) == 0 {

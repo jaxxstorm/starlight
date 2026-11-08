@@ -1,5 +1,7 @@
 # Experimental OpenWrt client package
 
+The GL.iNet page includes a router-originated benchmark comparing direct HTTPS requests with the local ground-fetch endpoint. It contacts six public sites twice, with a 14-second per-request timeout and 2 MiB response limit. It is not a measurement of individual clients or a bandwidth test. If the client is stopped or the ground fetch is unavailable, the Starlight results report failures rather than direct fallback. The command-line equivalent is `starlight bench --fast-port <port>`; its output is JSON.
+
 This is an **offline prototype**, not a published or supported package. Do not install it on the active router: target-specific installation, procd behavior, upgrades, rollback, removal, package trust and GL.iNet Manage Sources have not been validated. In particular, this package does not yet meet the change's verified-installation and failed-upgrade rollback requirements. It has no maintainer scripts, so it does not enable or start a service by itself. It creates no feed, firewall rules or transparent traffic integration.
 
 Build locally with a compatible Go toolchain and the current core:

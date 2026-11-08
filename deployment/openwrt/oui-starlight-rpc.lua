@@ -99,6 +99,26 @@ function M.test_connectivity()
 	return { success = command_ok("/usr/libexec/starlight-probe") }
 end
 
+function M.run_benchmark()
+	if not authorized() then return rpc.ERROR_CODE_ACCESS end
+	local config = read_config()
+	if not config then return { err_code = -1, err_msg = "Missing client configuration" } end
+	local port = config_value(config, "fast_port") or "8081"
+	if not port:match("^%d+$") or not tonumber(port) or tonumber(port) < 1 or tonumber(port) > 65535 then
+		return { err_code = -1, err_msg = "Invalid fast-fetch port" }
+	end
+	-- Only a validated numeric port is interpolated; URLs are fixed in the Go binary.
+	local p = io.popen("flock -n /var/lock/starlight-bench.lock /usr/sbin/starlight bench --fast-port " .. port .. " 2>/dev/null", "r")
+	if not p then return { err_code = -1, err_msg = "Could not start benchmark" } end
+	local output = p:read("*a")
+	p:close()
+	local ok, result = pcall(require("cjson").decode, output)
+	if not ok or type(result) ~= "table" or type(result.rows) ~= "table" then
+		return { err_code = -1, err_msg = "Benchmark unavailable or already running" }
+	end
+	return result
+end
+
 function M.set_router_wide(params)
 	if not authorized() then return rpc.ERROR_CODE_ACCESS end
 	if type(params) ~= "table" or type(params.enabled) ~= "boolean" then return rpc.ERROR_CODE_INVALID_PARAMS end

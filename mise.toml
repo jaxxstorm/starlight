@@ -1,0 +1,7 @@
+[tools]
+node = "22"
+"npm:docsify-cli" = "4.4.4"
+
+[tasks.serve]
+description = "Serve the Docsify documentation locally"
+run = "docsify serve Docs --port 8000"
